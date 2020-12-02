@@ -53,21 +53,6 @@ def build_fcn(minimap, screen, info, msize, ssize, num_action):
   for j in range(6):
     info_fc_spatial = tf.concat([info_fc_spatial, info_fc_spatial], 1)
     info_fc_spatial = tf.concat([info_fc_spatial, info_fc_spatial], 2)
-  
-#   info_spatial = layers.fully_connected(layers.flatten(info),
-#                                    num_outputs=8,
-#                                    activation_fn=tf.tanh,
-#                                    weights_regularizer=l1_regularizer,
-#                                    scope='info_spatial')  
-#   info_spatial = np.expand_dims(info_spatial, axis=1)
-#   info_spatial = np.expand_dims(info_spatial, axis=1)
-#   for i in range(len(info_spatial)):
-#       for j in range(msize):
-#           for k in range (msize):
-#               info_spatial[i][j][k] = info_spatial[i][0][0]
-
-  # Compute spatial actions
-
   feat_conv = tf.concat([mconv2, sconv2, info_fc_spatial], axis=3)
   spatial_action = layers.conv2d(feat_conv,
                                  num_outputs=1,
@@ -85,11 +70,16 @@ def build_fcn(minimap, screen, info, msize, ssize, num_action):
                                    activation_fn=tf.nn.relu,
                                    #weights_regularizer=l2_regularizer,
                                    scope='feat_fc')
-  non_spatial_action = layers.fully_connected(feat_fc,
+  cell = tf.nn.rnn_cell.BasicLSTMCell(256)
+  feat_fc1 = tf.expand_dims(feat_fc, 0)
+  istate = cell.zero_state(1, dtype = tf.float32)
+  output_rnn, states = tf.nn.dynamic_rnn(cell, feat_fc1, initial_state = istate)
+  output_rnn = tf.reduce_sum(output_rnn, 0)
+  non_spatial_action = layers.fully_connected(output_rnn,
                                               num_outputs=num_action,
                                               activation_fn=tf.nn.softmax,
                                               scope='non_spatial_action')
-  value = tf.reshape(layers.fully_connected(feat_fc,
+  value = tf.reshape(layers.fully_connected(output_rnn,
                                             num_outputs=1,
                                             activation_fn=None,
                                             scope='value'), [-1])
