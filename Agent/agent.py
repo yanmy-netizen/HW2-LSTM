@@ -22,9 +22,9 @@ class A3CAgent(object):
     assert msize == ssize
     self.msize = msize
     self.ssize = ssize
-    self.isize = len(actions.FUNCTIONS)
+    self.isize = 1423
     self.beta = 1
-    self.eta = 100
+    self.eta = 0.001
 
 
   def setup(self, sess, summary_writer):
@@ -39,7 +39,7 @@ class A3CAgent(object):
 
   def reset(self):
     # Epsilon schedule
-    self.epsilon = [0.05, 0.2, 0.1]
+    self.epsilon = [0.05, 0.2, 0.2]
 
 
   def build_model(self, reuse, dev):
@@ -63,7 +63,6 @@ class A3CAgent(object):
       self.valid_non_spatial_action = tf.placeholder(tf.float32, [None, len(actions.FUNCTIONS)], name='valid_non_spatial_action')
       self.non_spatial_action_selected = tf.placeholder(tf.float32, [None, len(actions.FUNCTIONS)], name='non_spatial_action_selected')
       self.value_target = tf.placeholder(tf.float32, [None], name='value_target')
-      
 
       # Compute log probability
       spatial_action_prob = tf.reduce_sum(self.spatial_action * self.spatial_action_selected, axis=1)
@@ -77,9 +76,11 @@ class A3CAgent(object):
       self.summary.append(tf.summary.histogram('non_spatial_action_prob', non_spatial_action_prob))
 
       #Compute entropy regularisation
-      non_spatial_action_prob_entropy = tf.reduce_sum(self.non_spatial_action * tf.log(tf.clip_by_value(self.non_spatial_action, 1e-10, 1.)), axis=1)
+
+      non_spatial_action_prob_entropy = self.non_spatial_action * tf.log(tf.clip_by_value(self.non_spatial_action, 1e-10, 1.))                                 
+      valid_non_spatial_action_prob_entropy = tf.reduce_sum(non_spatial_action_prob_entropy * self.valid_non_spatial_action, axis=1)
       spatial_action_prob_entropy = tf.reduce_sum(self.spatial_action * tf.log(tf.clip_by_value(self.spatial_action, 1e-10, 1.)), axis=1)
-      entropy = self.valid_spatial_action * spatial_action_prob_entropy + non_spatial_action_prob_entropy
+      entropy = spatial_action_prob_entropy + valid_non_spatial_action_prob_entropy
 
       # Compute losses, more details in https://arxiv.org/abs/1602.01783
       # Policy loss and value loss
@@ -87,12 +88,12 @@ class A3CAgent(object):
       advantage = tf.stop_gradient(self.value_target - self.value)
       policy_loss = - tf.reduce_mean(action_log_prob * advantage)
       value_loss = - tf.reduce_mean(self.value * advantage)
-      entropy_regularisation = - tf.reduce_mean(entropy)
+      entropy_regularisation = tf.reduce_mean(entropy)
       self.summary.append(tf.summary.scalar('policy_loss', policy_loss))
       self.summary.append(tf.summary.scalar('value_loss', value_loss))
 
       # TODO: policy penalty
-      loss = policy_loss + value_loss + self.eta * entropy_regularisation
+      loss = policy_loss + self.beta * value_loss + self.eta * entropy_regularisation
 
       # Build the optimizer
       self.learning_rate = tf.placeholder(tf.float32, None, name='learning_rate')
@@ -106,6 +107,7 @@ class A3CAgent(object):
         cliped_grad.append([grad, var])
       self.train_op = opt.apply_gradients(cliped_grad)
       self.summary_op = tf.summary.merge(self.summary)
+
       self.saver = tf.train.Saver(max_to_keep=100)
 
 
@@ -116,7 +118,8 @@ class A3CAgent(object):
     screen = np.expand_dims(U.preprocess_screen(screen), axis=0)
     # TODO: only use available actions
     info = np.zeros([1, self.isize], dtype=np.float32)
-    info[0, obs.observation['available_actions']] = 1
+    info[0] = U.get_info(obs)
+
 
     feed = {self.minimap: minimap,
             self.screen: screen,
@@ -132,6 +135,9 @@ class A3CAgent(object):
     act_id = valid_actions[np.argmax(non_spatial_action[valid_actions])]
     target = np.argmax(spatial_action)
     target = [int(target // self.ssize), int(target % self.ssize)]
+
+    if False:
+      print(actions.FUNCTIONS[act_id].name, target)
 
     # Epsilon greedy exploration
     if self.training and np.random.rand() < self.epsilon[0]:
@@ -231,8 +237,7 @@ class A3CAgent(object):
             self.valid_non_spatial_action: valid_non_spatial_action,
             self.non_spatial_action_selected: non_spatial_action_selected,
             self.learning_rate: lr}
-    self.sess.run(self.train_op, feed_dict=feed)
-    summary = self.sess.run(self.summary_op, feed_dict=feed)
+    _, summary = self.sess.run([self.train_op, self.summary_op], feed_dict=feed)
     self.summary_writer.add_summary(summary, cter)
 
 
