@@ -52,7 +52,6 @@ class A3CAgent(object):
       self.minimap = tf.placeholder(tf.float32, [None, U.minimap_channel(), self.msize, self.msize], name='minimap')
       self.screen = tf.placeholder(tf.float32, [None, U.screen_channel(), self.ssize, self.ssize], name='screen')
       self.info = tf.placeholder(tf.float32, [None, self.isize], name='info')
-      self.output_rnn2 = tf.placeholder(tf.float32, [None, 256], name='info')
 
       # Build networks
       net = build_fcn(self.minimap, self.screen, self.info, self.msize, self.ssize, len(actions.FUNCTIONS))

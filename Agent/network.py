@@ -57,9 +57,6 @@ def build_fcn(minimap, screen, info, msize, ssize, num_action):
 
   # Compute spatial actions
   feat_conv = tf.concat([mconv2, sconv2], axis=3)
-  print("feat_conv")
-  print(feat_conv.shape)
-  
   spatial_action = layers.conv2d(feat_conv,
                                  num_outputs=1,
                                  kernel_size=1,
@@ -68,8 +65,6 @@ def build_fcn(minimap, screen, info, msize, ssize, num_action):
                                  activation_fn=tf.nn.relu,
                                  scope='spatial_action')
   spatial_action = tf.nn.softmax(layers.flatten(spatial_action))
-  print("spatial")
-  print(spatial_action.shape)
   
   # Compute non spatial actions and value
   feat_fc = tf.concat([layers.flatten(mconv2), layers.flatten(sconv2), info_fc], axis=1)
@@ -78,27 +73,19 @@ def build_fcn(minimap, screen, info, msize, ssize, num_action):
                                    activation_fn=tf.nn.relu,
                                    #weights_regularizer=l2_regularizer,
                                    scope='feat_fc')
-  print(feat_fc.shape)
   
   cell = tf.nn.rnn_cell.BasicLSTMCell(256)
   feat_fc1 = tf.expand_dims(feat_fc, 0)
-  print(feat_fc1.shape)
   istate = cell.zero_state(1, dtype = tf.float32)
   output_rnn, states = tf.nn.dynamic_rnn(cell, feat_fc1, initial_state = istate)
-  print(output_rnn.shape)
   output_rnn = tf.reduce_sum(output_rnn, 0)
-  print(output_rnn.shape)
   non_spatial_action = layers.fully_connected(output_rnn,
                                               num_outputs=num_action,
                                               activation_fn=tf.nn.softmax,
                                               scope='non_spatial_action')
-  print("hzjsb")
-  print(non_spatial_action.shape)
   value = tf.reshape(layers.fully_connected(output_rnn,
                                             num_outputs=1,
                                             activation_fn=None,
                                             scope='value'), [-1])
-  print(value.shape)
-  print("sbhzj")
 
   return spatial_action, non_spatial_action, value
